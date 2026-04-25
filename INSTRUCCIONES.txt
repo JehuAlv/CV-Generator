@@ -1,0 +1,55 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                    CV GENERATOR - INSTRUCCIONES                 ║
+╚══════════════════════════════════════════════════════════════════╝
+
+
+  COMO USAR
+  ─────────
+
+  1. Abre "CV Generator.exe"
+
+  2. Tienes 2 opciones para meter los datos del cliente:
+
+     OPCION A - Pegar texto (la mas rapida):
+        Dale click al botón "Pegar texto del cliente" (arriba a la derecha).
+        Se abre una ventana con un ejemplo. Borra el ejemplo, pega el texto
+        del cliente con el mismo formato y dale "Cargar al formulario".
+        Se llenan todos los campos automaticamente.
+
+     OPCION B - Llenar a mano:
+        Ve campo por campo llenando los datos del cliente.
+        Para agregar trabajos dale "+ Agregar trabajo".
+        Para agregar educación dale "+ Agregar carrera / título".
+
+  3. Elige el diseño que quieras (paso 1 en la app, hay 10 estilos).
+
+  4. Dale click al botón verde "Generar mi CV".
+
+  5. Listo! Se abre la carpeta con los archivos:
+        - Un PDF listo para enviar
+        - Un Word editable por si quieres cambiar algo
+        El CV siempre queda en 1 sola página.
+
+
+  NOTAS
+  ─────
+
+  - La primera vez que abras el .exe puede tardar unos segundos, es normal.
+  - Si Windows lo bloquea: "Más información" > "Ejecutar de todos modos".
+  - Para hacer otro CV solo cambia los datos y vuelve a generar.
+  - Las secciones que digan (opcional) las puedes dejar vacias.
+
+
+  LOS 10 DISEÑOS
+  ───────────────
+
+     clasico        Azul oscuro, barras de color.
+     ejecutivo      Vino, nombre centrado, elegante.
+     moderno        Azul oceano, borde izquierdo.
+     elegante       Gris oscuro, líneas finas.
+     profesional    Verde bosque, compacto.
+     creativo       Negro con rojo, minimalista.
+     corporativo    Azul marino, header oscuro.
+     fresco         Verde esmeralda, juvenil.
+     sobrio         Ultra limpio, sin adornos.
+     audaz          Naranja terracota, fuerte.
