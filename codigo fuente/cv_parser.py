@@ -1,23 +1,35 @@
 import os
 import re
+import unicodedata
 from cv_templates import TEMPLATES
 
 
+def _strip_accents(text):
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 def pre_split_sections(text):
-    """
-    Inserta salto de linea antes de palabras clave de seccion y campos
-    para tolerar texto pegado en una sola linea.
-    """
     keywords = [
-        "DATOS PERSONALES", "RESUMEN PROFESIONAL", "LOGROS CLAVE",
-        "EXPERIENCIA PROFESIONAL", "EDUCACION", "CURSOS Y CERTIFICACIONES",
-        "HABILIDADES", "IDIOMAS",
+        "DATOS PERSONALES", "INFORMACION PERSONAL",
+        "RESUMEN PROFESIONAL", "PERFIL PROFESIONAL", "RESUMEN EJECUTIVO",
+        "OBJETIVO PROFESIONAL", "ACERCA DE MI", "SOBRE MI",
+        "LOGROS CLAVE", "LOGROS PRINCIPALES", "LOGROS DESTACADOS", "LOGROS",
+        "EXPERIENCIA PROFESIONAL", "EXPERIENCIA LABORAL", "EXPERIENCIA DE TRABAJO",
+        "HISTORIAL LABORAL", "TRAYECTORIA PROFESIONAL", "EXPERIENCIA",
+        "EDUCACION", "FORMACION ACADEMICA", "FORMACION", "ESTUDIOS",
+        "CURSOS Y CERTIFICACIONES", "CERTIFICACIONES Y CURSOS",
+        "CERTIFICACIONES", "CURSOS", "CAPACITACION",
+        "HABILIDADES", "COMPETENCIAS", "APTITUDES", "SKILLS",
+        "IDIOMAS", "LENGUAS",
         "PERSONAL INFORMATION", "PROFESSIONAL SUMMARY", "KEY ACHIEVEMENTS",
-        "PROFESSIONAL EXPERIENCE", "EDUCATION", "CERTIFICATIONS & COURSES",
-        "SKILLS", "LANGUAGES",
+        "PROFESSIONAL EXPERIENCE", "WORK EXPERIENCE",
+        "EDUCATION", "CERTIFICATIONS & COURSES", "CERTIFICATIONS",
+        "LANGUAGES",
         "NOMBRE:", "CONTACTO:", "TITULO:", "TEMA:",
-        "PUESTO:", "EMPRESA:", "FECHAS:",
-        "CARRERA:", "ESCUELA:",
+        "PUESTO:", "EMPRESA:", "FECHAS:", "CARGO:", "PERIODO:",
+        "CARRERA:", "ESCUELA:", "INSTITUCION:", "UNIVERSIDAD:",
+        "TELEFONO:", "EMAIL:", "CORREO:",
         "NAME:", "CONTACT:", "TITLE:",
         "POSITION:", "ROLE:", "COMPANY:", "DATES:",
         "DEGREE:", "SCHOOL:", "UNIVERSITY:",
@@ -25,48 +37,35 @@ def pre_split_sections(text):
 
     for kw in keywords:
         pattern = r'(?<!\n)(?=' + re.escape(kw) + r')'
-        text = re.sub(pattern, '\n', text, flags=re.IGNORECASE)
+        upper = _strip_accents(text).upper()
+        new_text = []
+        last = 0
+        for m in re.finditer(pattern, upper):
+            pos = m.start()
+            if pos > 0 and text[pos - 1] != '\n':
+                new_text.append(text[last:pos])
+                new_text.append('\n')
+                last = pos
+        new_text.append(text[last:])
+        text = "".join(new_text)
 
     return text
 
 
 def normalize_text(text):
-    text = text.lstrip('\ufeff')
+    text = text.lstrip('﻿')
     replacements = {
-        "\u2013": "-",
-        "\u2014": "-",
-        "\u2212": "-",
-        "\u2010": "-",
-        "\u2011": "-",
-        "\u2012": "-",
-        "\u2015": "-",
-        "\u2022": "-",
-        "\u25CF": "-",
-        "\u25AA": "-",
-        "\u25A0": "-",
-        "\u2023": "-",
-        "\u2043": "-",
-        "\u00A0": " ",
-        "\u202F": " ",
-        "\u2009": " ",
-        "\u2008": " ",
-        "\u2007": " ",
-        "\u2006": " ",
-        "\u2005": " ",
-        "\u2004": " ",
-        "\u2003": " ",
-        "\u2002": " ",
-        "\u200B": "",
-        "\u200C": "",
-        "\u200D": "",
-        "\uFEFF": "",
+        "–": "-", "—": "-", "−": "-",
+        "‐": "-", "‑": "-", "‒": "-", "―": "-",
+        "•": "-", "●": "-", "▪": "-", "■": "-",
+        "‣": "-", "⁃": "-",
+        " ": " ", " ": " ", " ": " ", " ": " ",
+        " ": " ", " ": " ", " ": " ", " ": " ",
+        " ": " ", " ": " ",
+        "​": "", "‌": "", "‍": "", "﻿": "",
         "\t": " ",
-        "\u201C": '"',
-        "\u201D": '"',
-        "\u2018": "'",
-        "\u2019": "'",
-        "\u201A": "'",
-        "\u201E": '"',
+        "“": '"', "”": '"',
+        "‘": "'", "’": "'", "‚": "'", "„": '"',
     }
 
     for k, v in replacements.items():
@@ -94,13 +93,69 @@ def normalize_text(text):
 
 
 def _starts(text, *prefixes):
-    up = re.sub(r"\s+", " ", text.strip()).upper()
+    up = _strip_accents(re.sub(r"\s+", " ", text.strip())).upper()
     up_clean = up.rstrip(": ")
     for p in prefixes:
-        p_clean = p.upper().rstrip(": ")
+        p_clean = _strip_accents(p).upper().rstrip(": ")
         if up_clean.startswith(p_clean):
             return True
     return False
+
+
+def _strip_bullet(line):
+    m = re.match(r"^(?:[-*•]|\d{1,2}[.)]\s*-?\s*)\s*(.+)", line)
+    if m:
+        return m.group(1).strip()
+    return line.strip()
+
+
+_SECTION_MAP = {}
+for _canonical, _variants in {
+    "DATOS PERSONALES": [
+        "DATOS PERSONALES", "INFORMACION PERSONAL",
+        "PERSONAL INFORMATION",
+    ],
+    "RESUMEN PROFESIONAL": [
+        "RESUMEN PROFESIONAL", "PERFIL PROFESIONAL", "RESUMEN EJECUTIVO",
+        "OBJETIVO PROFESIONAL", "ACERCA DE MI", "SOBRE MI",
+        "PROFESSIONAL SUMMARY",
+    ],
+    "LOGROS CLAVE": [
+        "LOGROS CLAVE", "LOGROS PRINCIPALES", "LOGROS DESTACADOS", "LOGROS",
+        "KEY ACHIEVEMENTS",
+    ],
+    "EXPERIENCIA PROFESIONAL": [
+        "EXPERIENCIA PROFESIONAL", "EXPERIENCIA LABORAL",
+        "EXPERIENCIA DE TRABAJO", "HISTORIAL LABORAL",
+        "TRAYECTORIA PROFESIONAL", "EXPERIENCIA",
+        "PROFESSIONAL EXPERIENCE", "WORK EXPERIENCE",
+    ],
+    "EDUCACION": [
+        "EDUCACION", "FORMACION ACADEMICA", "FORMACION", "ESTUDIOS",
+        "EDUCATION",
+    ],
+    "CURSOS Y CERTIFICACIONES": [
+        "CURSOS Y CERTIFICACIONES", "CERTIFICACIONES Y CURSOS",
+        "CERTIFICACIONES", "CURSOS", "CAPACITACION",
+        "CERTIFICATIONS & COURSES", "CERTIFICATIONS",
+    ],
+    "HABILIDADES": [
+        "HABILIDADES", "COMPETENCIAS", "APTITUDES",
+        "SKILLS",
+    ],
+    "IDIOMAS": [
+        "IDIOMAS", "LENGUAS",
+        "LANGUAGES",
+    ],
+}.items():
+    for _v in _variants:
+        _SECTION_MAP[_v] = _canonical
+
+
+def _match_section(line):
+    clean = _strip_accents(line.strip()).upper()
+    clean = re.sub(r"[:\s]+$", "", clean)
+    return _SECTION_MAP.get(clean)
 
 
 def parse_text(text):
@@ -124,6 +179,12 @@ def parse_text(text):
             data["experiencia"].append(current_job)
         current_job = None
 
+    def flush_edu():
+        nonlocal current_edu
+        if current_edu and current_edu.get("titulo"):
+            data["educacion"].append(current_edu)
+        current_edu = None
+
     for raw_line in lines:
         line = raw_line.strip()
         if not line:
@@ -131,34 +192,23 @@ def parse_text(text):
         if line.startswith("====") or line.startswith("----"):
             continue
 
-        upper = re.sub(r":$", "", line.strip().upper())
-        EN_TO_ES = {
-            "PERSONAL INFORMATION": "DATOS PERSONALES",
-            "PROFESSIONAL SUMMARY": "RESUMEN PROFESIONAL",
-            "KEY ACHIEVEMENTS": "LOGROS CLAVE",
-            "PROFESSIONAL EXPERIENCE": "EXPERIENCIA PROFESIONAL",
-            "EDUCATION": "EDUCACION",
-            "CERTIFICATIONS & COURSES": "CURSOS Y CERTIFICACIONES",
-            "SKILLS": "HABILIDADES",
-            "LANGUAGES": "IDIOMAS",
-        }
-        mapped = EN_TO_ES.get(upper, upper)
-        if mapped in ("DATOS PERSONALES", "RESUMEN PROFESIONAL", "LOGROS CLAVE",
-                      "EXPERIENCIA PROFESIONAL", "EDUCACION", "CURSOS Y CERTIFICACIONES",
-                      "HABILIDADES", "IDIOMAS"):
+        matched_section = _match_section(line)
+        if matched_section:
             if section == "RESUMEN PROFESIONAL" and buffer:
                 data["resumen"] = " ".join(buffer)
                 buffer = []
             if section == "EXPERIENCIA PROFESIONAL":
                 flush_job()
-            section = mapped
+            if section == "EDUCACION":
+                flush_edu()
+            section = matched_section
             continue
 
         stripped = line.strip()
         if not stripped:
             continue
 
-        if stripped.upper().startswith("TEMA:"):
+        if _starts(stripped, "TEMA:", "THEME:"):
             val = stripped.split(":", 1)[1].strip().lower()
             if val in TEMPLATES:
                 data["theme"] = val
@@ -167,60 +217,68 @@ def parse_text(text):
         if section == "DATOS PERSONALES":
             if _starts(stripped, "NOMBRE:", "NAME:"):
                 data["nombre"] = stripped.split(":", 1)[1].strip()
-            elif _starts(stripped, "CONTACTO:", "CONTACT:"):
-                data["contacto"] = stripped.split(":", 1)[1].strip()
-            elif _starts(stripped, "TITULO:", "TITLE:"):
+            elif _starts(stripped, "CONTACTO:", "CONTACT:", "TELEFONO:", "EMAIL:", "CORREO:"):
+                val = stripped.split(":", 1)[1].strip()
+                if data["contacto"]:
+                    data["contacto"] += " | " + val
+                else:
+                    data["contacto"] = val
+            elif _starts(stripped, "TITULO:", "TÍTULO:", "TITLE:", "PUESTO:", "POSICION:"):
                 data["titulo"] = stripped.split(":", 1)[1].strip()
 
         elif section == "RESUMEN PROFESIONAL":
             buffer.append(stripped)
 
         elif section == "LOGROS CLAVE":
-            m = re.match(r"^[-*]\s*(.+)", stripped)
-            if m:
-                data["logros"].append(m.group(1).strip())
+            data["logros"].append(_strip_bullet(stripped))
 
         elif section == "EXPERIENCIA PROFESIONAL":
-            if _starts(stripped, "PUESTO:", "POSITION:", "ROLE:"):
+            if _starts(stripped, "PUESTO:", "POSITION:", "ROLE:", "CARGO:"):
                 flush_job()
                 current_job = {"puesto": "", "empresa": "", "fechas": "", "bullets": []}
                 current_job["puesto"] = stripped.split(":", 1)[1].strip()
-            elif _starts(stripped, "EMPRESA:", "COMPANY:") and current_job:
+            elif _starts(stripped, "EMPRESA:", "COMPANY:", "ORGANIZACION:", "COMPAÑIA:", "COMPANIA:"):
+                if not current_job:
+                    current_job = {"puesto": "", "empresa": "", "fechas": "", "bullets": []}
                 current_job["empresa"] = stripped.split(":", 1)[1].strip()
-            elif _starts(stripped, "FECHAS:", "DATES:") and current_job:
+            elif _starts(stripped, "FECHAS:", "DATES:", "PERIODO:", "FECHA:"):
+                if not current_job:
+                    current_job = {"puesto": "", "empresa": "", "fechas": "", "bullets": []}
                 current_job["fechas"] = stripped.split(":", 1)[1].strip()
             elif current_job:
-                m = re.match(r"^[-*]\s*(.+)", stripped)
-                if m:
-                    current_job["bullets"].append(m.group(1).strip())
+                current_job["bullets"].append(_strip_bullet(stripped))
 
         elif section == "EDUCACION":
-            if _starts(stripped, "CARRERA:", "DEGREE:"):
+            if _starts(stripped, "CARRERA:", "DEGREE:", "TITULO:", "TÍTULO:", "GRADO:"):
+                flush_edu()
                 current_edu = {"titulo": stripped.split(":", 1)[1].strip(), "institucion": ""}
-            elif _starts(stripped, "ESCUELA:", "SCHOOL:", "UNIVERSITY:") and current_edu:
+            elif _starts(stripped, "ESCUELA:", "SCHOOL:", "UNIVERSITY:", "UNIVERSIDAD:",
+                         "INSTITUCION:", "INSTITUCIÓN:", "CENTRO:"):
+                if not current_edu:
+                    current_edu = {"titulo": "", "institucion": ""}
                 current_edu["institucion"] = stripped.split(":", 1)[1].strip()
-                data["educacion"].append(current_edu)
-                current_edu = None
+                if not current_edu["titulo"]:
+                    flush_edu()
 
         elif section == "CURSOS Y CERTIFICACIONES":
-            m = re.match(r"^[-*]\s*(.+)", stripped)
-            if m:
-                data["cursos"].append(m.group(1).strip())
+            data["cursos"].append(_strip_bullet(stripped))
 
         elif section == "HABILIDADES":
             if ":" in stripped:
                 parts = stripped.split(":", 1)
-                data["habilidades"].append((parts[0].strip(), parts[1].strip()))
+                val = parts[1].strip()
+                if val and val.upper() != "N/A":
+                    data["habilidades"].append((parts[0].strip(), val))
 
         elif section == "IDIOMAS":
-            m = re.match(r"^[-*]\s*(.+)", stripped)
-            if m:
-                data["idiomas"].append(m.group(1).strip())
+            data["idiomas"].append(_strip_bullet(stripped))
 
     if section == "RESUMEN PROFESIONAL" and buffer:
         data["resumen"] = " ".join(buffer)
     if section == "EXPERIENCIA PROFESIONAL":
         flush_job()
+    if section == "EDUCACION":
+        flush_edu()
     return data
 
 
