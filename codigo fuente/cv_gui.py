@@ -134,6 +134,7 @@ class CVGeneratorApp:
 
         self.experiences = []
         self.education_list = []
+        self.foto_path = None
 
         self._setup_styles()
         self._build_ui()
@@ -197,6 +198,38 @@ class CVGeneratorApp:
         self._section_number(content, "1", "Elige el diseño de tu CV")
         card = self._card(content)
         self._build_template_selector(card)
+
+        # ── FOTO ──
+        foto_frame = tk.Frame(content, bg=BG)
+        foto_frame.pack(fill="x", pady=(10, 0))
+
+        self.foto_var = tk.BooleanVar(value=False)
+        foto_check = tk.Checkbutton(foto_frame,
+            text="  Incluir foto en el CV  (esquina superior izquierda)",
+            variable=self.foto_var,
+            font=("Segoe UI", 10), fg=TEXT, bg=BG, activebackground=BG,
+            selectcolor=CARD, cursor="hand2",
+            command=self._toggle_foto)
+        foto_check.pack(anchor="w")
+
+        self.foto_controls = tk.Frame(content, bg=BG)
+        self._foto_frame_ref = foto_frame
+
+        foto_inner = tk.Frame(self.foto_controls, bg=CARD, relief="solid", bd=1)
+        foto_inner.pack(fill="x", padx=15, pady=(2, 6))
+
+        self._flat_btn(foto_inner, "Seleccionar foto", PRIMARY,
+                       self._select_foto, 9).pack(side="left", padx=(10, 8), pady=8)
+        self.foto_label = tk.Label(foto_inner, text="Ningún archivo seleccionado",
+                                    font=("Segoe UI", 9), fg=HINT, bg=CARD)
+        self.foto_label.pack(side="left", padx=(0, 10), pady=8)
+
+        self.foto_clear_btn = tk.Button(foto_inner, text="Quitar",
+            font=("Segoe UI", 8), fg="white", bg=RED, activebackground="#B91C1C",
+            relief="flat", cursor="hand2", padx=6, pady=2,
+            command=self._clear_foto)
+        self.foto_clear_btn.pack(side="right", padx=(0, 10), pady=8)
+        self.foto_clear_btn.pack_forget()
 
         # ── 2. DATOS PERSONALES ──
         self._section_number(content, "2", "Tus datos personales")
@@ -349,6 +382,29 @@ class CVGeneratorApp:
         lbl = tk.Label(parent, text=text, font=("Segoe UI", 9), fg=HINT, bg=CARD)
         lbl.pack(anchor="w", pady=(4, 4))
         lbl._tag = tag
+
+    # ── Photo helpers ──
+
+    def _toggle_foto(self):
+        if self.foto_var.get():
+            self.foto_controls.pack(fill="x", pady=(2, 0), after=self._foto_frame_ref)
+        else:
+            self.foto_controls.pack_forget()
+
+    def _select_foto(self):
+        path = filedialog.askopenfilename(
+            title="Selecciona una foto",
+            filetypes=[("Imágenes", "*.png *.jpg *.jpeg *.bmp *.gif"),
+                       ("Todos los archivos", "*.*")])
+        if path:
+            self.foto_path = path
+            self.foto_label.config(text=os.path.basename(path), fg=GREEN)
+            self.foto_clear_btn.pack(side="right", padx=(0, 10), pady=8)
+
+    def _clear_foto(self):
+        self.foto_path = None
+        self.foto_label.config(text="Ningún archivo seleccionado", fg=HINT)
+        self.foto_clear_btn.pack_forget()
 
     # ── Template selector with color preview ──
 
@@ -573,6 +629,10 @@ class CVGeneratorApp:
         resumen_raw = self.resumen_text.get_value()
         resumen = " ".join(l.strip() for l in resumen_raw.split("\n") if l.strip()) if resumen_raw else ""
 
+        foto = None
+        if self.foto_var.get() and self.foto_path and os.path.exists(self.foto_path):
+            foto = self.foto_path
+
         return {
             "theme": self.template_var.get(),
             "nombre": nombre,
@@ -585,6 +645,7 @@ class CVGeneratorApp:
             "cursos": cursos,
             "habilidades": habilidades,
             "idiomas": idiomas,
+            "foto": foto,
         }
 
     # ── Generate ──

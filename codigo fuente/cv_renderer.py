@@ -1,8 +1,9 @@
 import io
+import os
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, HRFlowable, SimpleDocTemplate
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, HRFlowable, SimpleDocTemplate, Image as RLImage
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -234,6 +235,18 @@ def _build_pdf_story(data, scale, labels=None):
         elements.append(Spacer(1, s(1.5)))
         return elements
 
+    foto_path = data.get("foto")
+    foto_img = None
+    foto_w = 0
+    FOTO_SZ = 1.0 * inch
+    if foto_path and os.path.exists(foto_path):
+        try:
+            foto_img = RLImage(foto_path, width=FOTO_SZ, height=FOTO_SZ)
+            foto_img.hAlign = 'LEFT'
+            foto_w = FOTO_SZ + 8
+        except Exception:
+            foto_img = None
+
     story = []
     if tpl.get("dark_header"):
         name_dark = ParagraphStyle("NameDK", fontName="Helvetica-Bold", fontSize=s(20), leading=s(24), textColor=WHITE, spaceAfter=0)
@@ -242,21 +255,49 @@ def _build_pdf_story(data, scale, labels=None):
         hdr_story = [Paragraph(data["nombre"], name_dark), Spacer(1, s(2)), Paragraph(data["contacto"], contact_dark)]
         if data["titulo"]:
             hdr_story += [Spacer(1, s(2)), Paragraph(data["titulo"], subtitle_dark)]
-        hdr_tbl = Table([[hdr_story]], colWidths=[page_w])
-        hdr_tbl.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), ACCENT),
-            ("TOPPADDING", (0, 0), (-1, -1), s(8)),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), s(8)),
-            ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ]))
+
+        if foto_img:
+            text_w = page_w - foto_w
+            hdr_tbl = Table([[foto_img, hdr_story]], colWidths=[foto_w, text_w])
+            hdr_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), ACCENT),
+                ("TOPPADDING", (0, 0), (-1, -1), s(8)),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), s(8)),
+                ("LEFTPADDING", (0, 0), (0, 0), 10),
+                ("LEFTPADDING", (1, 0), (1, 0), 6),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+        else:
+            hdr_tbl = Table([[hdr_story]], colWidths=[page_w])
+            hdr_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), ACCENT),
+                ("TOPPADDING", (0, 0), (-1, -1), s(8)),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), s(8)),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ]))
         story.append(hdr_tbl)
     else:
-        story.append(Paragraph(data["nombre"], name_style))
-        story.append(Spacer(1, s(2)))
-        story.append(Paragraph(data["contacto"], contact_style))
-        if data["titulo"]:
+        if foto_img:
+            text_w = page_w - foto_w
+            text_parts = [Paragraph(data["nombre"], name_style), Spacer(1, s(2)), Paragraph(data["contacto"], contact_style)]
+            if data["titulo"]:
+                text_parts += [Spacer(1, s(2)), Paragraph(data["titulo"], subtitle_style)]
+            hdr_tbl = Table([[foto_img, text_parts]], colWidths=[foto_w, text_w])
+            hdr_tbl.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 6),
+            ]))
+            story.append(hdr_tbl)
+        else:
+            story.append(Paragraph(data["nombre"], name_style))
             story.append(Spacer(1, s(2)))
-            story.append(Paragraph(data["titulo"], subtitle_style))
+            story.append(Paragraph(data["contacto"], contact_style))
+            if data["titulo"]:
+                story.append(Spacer(1, s(2)))
+                story.append(Paragraph(data["titulo"], subtitle_style))
     story.append(Spacer(1, s(4)))
 
     sep = tpl["separator"]
@@ -844,70 +885,185 @@ def generate_word(data, output_path, scale=1.0, labels=None):
         for b in job["bullets"]:
             add_bullet(b)
 
-    if tpl.get("dark_header"):
-        table = doc.add_table(rows=1, cols=1)
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        cell = table.cell(0, 0)
-        tc = cell._tc
-        tcPr = tc.get_or_add_tcPr()
-        tcPr.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{BG_HEX}"/>'))
-        cell_margins(cell, 60, 100, 60, 100)
-        p = cell.paragraphs[0]
-        p.clear()
-        run = p.add_run(data["nombre"])
-        run.bold = True
-        run.font.size = Pt(s(22))
-        run.font.color.rgb = C_WHITE
-        sp(p, 0, 2, 24)
-        p2 = cell.add_paragraph()
-        run2 = p2.add_run(data["contacto"])
-        run2.font.size = Pt(s(9))
-        run2.font.color.rgb = RGBColor(0xCC, 0xDD, 0xEE)
-        sp(p2, 0, 0, 11)
-        if data["titulo"]:
-            p3 = cell.add_paragraph()
-            run3 = p3.add_run(data["titulo"])
-            run3.font.size = Pt(s(10))
-            run3.font.color.rgb = RGBColor(0x88, 0xBB, 0xDD)
-            run3.italic = True
-            sp(p3, 1, 0, 12)
-        tblPr = table._tbl.tblPr
-        tblPr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="5000" w:type="pct"/>'))
-        brd = parse_xml(
-            f'<w:tblBorders {nsdecls("w")}> '
-            f'  <w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'  <w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'  <w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'  <w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'  <w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'  <w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
-            f'</w:tblBorders>'
-        )
-        tblPr.append(brd)
+    word_foto = data.get("foto")
+    has_word_foto = word_foto and os.path.exists(word_foto)
+
+    FOTO_H = Cm(2.5)
+    FOTO_W = Cm(2.5)
+    if has_word_foto:
+        FOTO_COL_DXA = int((int(FOTO_W) + int(Cm(0.4))) / 635)
     else:
-        p = doc.add_paragraph()
-        p.alignment = header_align
-        run = p.add_run(data["nombre"])
-        run.bold = True
-        run.font.size = Pt(s(22))
-        run.font.color.rgb = C_PRIMARY
-        sp(p, 0, 0, 24)
+        FOTO_COL_DXA = 0
 
-        p = doc.add_paragraph()
-        p.alignment = header_align
-        run = p.add_run(data["contacto"])
-        run.font.size = Pt(s(9))
-        run.font.color.rgb = C_TEXT
-        sp(p, 0, 0, 11)
+    PAGE_W_DXA = 10206
 
-        if data["titulo"]:
+    def _foto_table(parent_is_cell=False, bg_hex=None):
+        if parent_is_cell:
+            return None, None
+        tbl = doc.add_table(rows=1, cols=2)
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        tblPr = tbl._tbl.tblPr
+        tblPr.append(parse_xml(
+            f'<w:tblLayout {nsdecls("w")} w:type="fixed"/>'
+        ))
+        text_col_dxa = PAGE_W_DXA - FOTO_COL_DXA
+        tblPr.append(parse_xml(
+            f'<w:tblGrid {nsdecls("w")}>'
+            f'  <w:gridCol w:w="{FOTO_COL_DXA}"/>'
+            f'  <w:gridCol w:w="{text_col_dxa}"/>'
+            f'</w:tblGrid>'
+        ))
+        tblPr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="5000" w:type="pct"/>'))
+        no_borders(tbl)
+
+        fc = tbl.cell(0, 0)
+        tc_fc = fc._tc
+        tcPr_fc = tc_fc.get_or_add_tcPr()
+        tcPr_fc.append(parse_xml(
+            f'<w:tcW {nsdecls("w")} w:w="{FOTO_COL_DXA}" w:type="dxa"/>'
+        ))
+        if bg_hex:
+            tcPr_fc.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{bg_hex}"/>'))
+        tcPr_fc.append(parse_xml(f'<w:vAlign {nsdecls("w")} w:val="top"/>'))
+        cell_margins(fc, 20, 20, 0, 20)
+        p_f = fc.paragraphs[0]
+        p_f.clear()
+        pf_fmt = p_f.paragraph_format
+        pf_fmt.space_before = Pt(0)
+        pf_fmt.space_after = Pt(0)
+        pf_fmt.line_spacing = Pt(0)
+        p_f.add_run().add_picture(word_foto, width=FOTO_W, height=FOTO_H)
+
+        tc_t = tbl.cell(0, 1)
+        tcPr_t = tc_t._tc.get_or_add_tcPr()
+        tcPr_t.append(parse_xml(
+            f'<w:tcW {nsdecls("w")} w:w="{text_col_dxa}" w:type="dxa"/>'
+        ))
+        if bg_hex:
+            tcPr_t.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{bg_hex}"/>'))
+        tcPr_t.append(parse_xml(f'<w:vAlign {nsdecls("w")} w:val="top"/>'))
+        cell_margins(tc_t, 20, 60, 0, 60)
+
+        return tbl, tc_t
+
+    if tpl.get("dark_header"):
+        if has_word_foto:
+            tbl, text_cell = _foto_table(bg_hex=BG_HEX)
+            fc = tbl.cell(0, 0)
+            tc_fc = fc._tc
+            tcPr_fc = tc_fc.get_or_add_tcPr()
+            tcPr_fc.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{BG_HEX}"/>'))
+
+            p = text_cell.paragraphs[0]
+            p.clear()
+            run = p.add_run(data["nombre"])
+            run.bold = True
+            run.font.size = Pt(s(22))
+            run.font.color.rgb = C_WHITE
+            sp(p, 0, 2, 24)
+            p2 = text_cell.add_paragraph()
+            run2 = p2.add_run(data["contacto"])
+            run2.font.size = Pt(s(9))
+            run2.font.color.rgb = RGBColor(0xCC, 0xDD, 0xEE)
+            sp(p2, 0, 0, 11)
+            if data["titulo"]:
+                p3 = text_cell.add_paragraph()
+                run3 = p3.add_run(data["titulo"])
+                run3.font.size = Pt(s(10))
+                run3.font.color.rgb = RGBColor(0x88, 0xBB, 0xDD)
+                run3.italic = True
+                sp(p3, 1, 0, 12)
+        else:
+            table = doc.add_table(rows=1, cols=1)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            cell = table.cell(0, 0)
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            tcPr.append(parse_xml(f'<w:shd {nsdecls("w")} w:fill="{BG_HEX}"/>'))
+            cell_margins(cell, 60, 100, 60, 100)
+            p = cell.paragraphs[0]
+            p.clear()
+            run = p.add_run(data["nombre"])
+            run.bold = True
+            run.font.size = Pt(s(22))
+            run.font.color.rgb = C_WHITE
+            sp(p, 0, 2, 24)
+            p2 = cell.add_paragraph()
+            run2 = p2.add_run(data["contacto"])
+            run2.font.size = Pt(s(9))
+            run2.font.color.rgb = RGBColor(0xCC, 0xDD, 0xEE)
+            sp(p2, 0, 0, 11)
+            if data["titulo"]:
+                p3 = cell.add_paragraph()
+                run3 = p3.add_run(data["titulo"])
+                run3.font.size = Pt(s(10))
+                run3.font.color.rgb = RGBColor(0x88, 0xBB, 0xDD)
+                run3.italic = True
+                sp(p3, 1, 0, 12)
+            tblPr = table._tbl.tblPr
+            tblPr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="5000" w:type="pct"/>'))
+            brd = parse_xml(
+                f'<w:tblBorders {nsdecls("w")}> '
+                f'  <w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'  <w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'  <w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'  <w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'  <w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'  <w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>'
+                f'</w:tblBorders>'
+            )
+            tblPr.append(brd)
+    else:
+        if has_word_foto:
+            tbl, text_cell = _foto_table()
+            p = text_cell.paragraphs[0]
+            p.clear()
+            p.alignment = header_align
+            run = p.add_run(data["nombre"])
+            run.bold = True
+            run.font.size = Pt(s(22))
+            run.font.color.rgb = C_PRIMARY
+            sp(p, 0, 0, 24)
+
+            p2 = text_cell.add_paragraph()
+            p2.alignment = header_align
+            run2 = p2.add_run(data["contacto"])
+            run2.font.size = Pt(s(9))
+            run2.font.color.rgb = C_TEXT
+            sp(p2, 0, 0, 11)
+
+            if data["titulo"]:
+                p3 = text_cell.add_paragraph()
+                p3.alignment = header_align
+                run3 = p3.add_run(data["titulo"])
+                run3.font.size = Pt(s(10))
+                run3.font.color.rgb = C_ACCENT
+                run3.italic = True
+                sp(p3, 0, 2, 12)
+        else:
             p = doc.add_paragraph()
             p.alignment = header_align
-            run = p.add_run(data["titulo"])
-            run.font.size = Pt(s(10))
-            run.font.color.rgb = C_ACCENT
-            run.italic = True
-            sp(p, 0, 2, 12)
+            run = p.add_run(data["nombre"])
+            run.bold = True
+            run.font.size = Pt(s(22))
+            run.font.color.rgb = C_PRIMARY
+            sp(p, 0, 0, 24)
+
+            p = doc.add_paragraph()
+            p.alignment = header_align
+            run = p.add_run(data["contacto"])
+            run.font.size = Pt(s(9))
+            run.font.color.rgb = C_TEXT
+            sp(p, 0, 0, 11)
+
+            if data["titulo"]:
+                p = doc.add_paragraph()
+                p.alignment = header_align
+                run = p.add_run(data["titulo"])
+                run.font.size = Pt(s(10))
+                run.font.color.rgb = C_ACCENT
+                run.italic = True
+                sp(p, 0, 2, 12)
 
     sep = tpl["separator"]
     if sep in ("hr", "accent_thick", "thin_line"):
